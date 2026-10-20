@@ -2,6 +2,9 @@
 
 import random
 import unittest
+import importlib.util
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from data_generator import (
     generate_data_with_eight_zeros,
@@ -22,6 +25,9 @@ from line_coding import (
 )
 from scrambling import decode_b8zs, decode_hdb3, encode_b8zs, encode_hdb3
 from modulation import delta_decode, delta_encode, pcm_decode, pcm_encode
+from plotter import plot_delta_reconstruction, plot_modulation_reconstructions, plot_waveform
+
+MATPLOTLIB_AVAILABLE = importlib.util.find_spec("matplotlib") is not None
 
 
 class DataGeneratorTests(unittest.TestCase):
@@ -182,6 +188,39 @@ class ModulationTests(unittest.TestCase):
             delta_encode([0.0], step_size=0)
         with self.assertRaises(ValueError):
             delta_decode("102", step_size=0.5)
+
+
+class PlotterTests(unittest.TestCase):
+    def test_waveform_rejects_inconsistent_timing(self):
+        with self.assertRaises(ValueError):
+            plot_waveform([1, -1], "waveform.png", samples_per_bit=2, bit_count=2)
+
+    @unittest.skipUnless(MATPLOTLIB_AVAILABLE, "Matplotlib is not installed")
+    def test_waveform_is_saved_as_a_readable_png(self):
+        from PIL import Image
+
+        with TemporaryDirectory() as directory:
+            path = plot_waveform(
+                [1, -1, -1, 1], Path(directory) / "encoded.png", scheme="Manchester",
+                samples_per_bit=2, bit_count=2,
+            )
+            with Image.open(path) as image:
+                self.assertEqual(image.format, "PNG")
+                self.assertGreater(image.width, 0)
+                self.assertGreater(image.height, 0)
+
+    @unittest.skipUnless(MATPLOTLIB_AVAILABLE, "Matplotlib is not installed")
+    def test_reconstruction_plots_are_saved(self):
+        from PIL import Image
+
+        with TemporaryDirectory() as directory:
+            delta_path = plot_delta_reconstruction([0.0, 0.5, 0.0], Path(directory) / "delta.png")
+            combined_path = plot_modulation_reconstructions(
+                [-0.5, 0.5], [0.0, 0.5], Path(directory) / "both.png"
+            )
+            for path in (delta_path, combined_path):
+                with Image.open(path) as image:
+                    self.assertEqual(image.format, "PNG")
 
 
 if __name__ == "__main__":
