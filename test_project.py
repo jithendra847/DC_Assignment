@@ -27,6 +27,8 @@ from scrambling import decode_b8zs, decode_hdb3, encode_b8zs, encode_hdb3
 from modulation import delta_decode, delta_encode, pcm_decode, pcm_encode
 from plotter import plot_delta_reconstruction, plot_modulation_reconstructions, plot_waveform
 from decoder import decode_waveform_image
+import main as assignment_main
+from unittest.mock import patch
 
 MATPLOTLIB_AVAILABLE = importlib.util.find_spec("matplotlib") is not None
 PILLOW_AVAILABLE = importlib.util.find_spec("PIL") is not None
@@ -290,6 +292,38 @@ class ImageDecoderTests(unittest.TestCase):
             decode_waveform_image("missing.png", "NRZ-L", 0)
         with self.assertRaises(ValueError):
             decode_waveform_image("missing.png", "NRZ-L", 2, samples_per_bit=2)
+
+
+class InteractiveWorkflowTests(unittest.TestCase):
+    def make_input(self, answers):
+        iterator = iter(answers)
+        return lambda _prompt: next(iterator)
+
+    def test_digital_workflow_encodes_and_saves_waveform(self):
+        answers = ["1", "4", "0101", "n", "1", "", "n"]
+        output = []
+        with patch.object(assignment_main, "plot_waveform") as plot:
+            assignment_main.run_interactive(self.make_input(answers), output.append)
+        plot.assert_called_once()
+        self.assertEqual(plot.call_args.args[0], [1, -1, 1, -1])
+        self.assertIn("Digital data: 0101", output)
+
+    def test_analog_delta_stream_can_be_passed_to_line_coding(self):
+        answers = ["2", "2", "0.2, 0.8, -0.2", "0.5", "", "", "y", "1", "", "n"]
+        output = []
+        with (
+            patch.object(assignment_main, "plot_delta_reconstruction"),
+            patch.object(assignment_main, "plot_waveform") as plot_wave,
+        ):
+            assignment_main.run_interactive(self.make_input(answers), output.append)
+        self.assertEqual(plot_wave.call_count, 1)
+        self.assertEqual(plot_wave.call_args.args[0], [-1, -1, 1])
+        self.assertIn("Delta Modulation digital stream: 110", output)
+
+    def test_invalid_mode_is_reported_without_traceback(self):
+        output = []
+        assignment_main.run_interactive(self.make_input(["x"]), output.append)
+        self.assertTrue(any("Unable to complete" in line for line in output))
 
 
 if __name__ == "__main__":
