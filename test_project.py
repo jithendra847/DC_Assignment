@@ -26,8 +26,10 @@ from line_coding import (
 from scrambling import decode_b8zs, decode_hdb3, encode_b8zs, encode_hdb3
 from modulation import delta_decode, delta_encode, pcm_decode, pcm_encode
 from plotter import plot_delta_reconstruction, plot_modulation_reconstructions, plot_waveform
+from decoder import decode_waveform_image
 
 MATPLOTLIB_AVAILABLE = importlib.util.find_spec("matplotlib") is not None
+PILLOW_AVAILABLE = importlib.util.find_spec("PIL") is not None
 
 
 class DataGeneratorTests(unittest.TestCase):
@@ -221,6 +223,73 @@ class PlotterTests(unittest.TestCase):
             for path in (delta_path, combined_path):
                 with Image.open(path) as image:
                     self.assertEqual(image.format, "PNG")
+
+
+class ImageDecoderTests(unittest.TestCase):
+    def make_waveform_image(self, levels, path):
+        from PIL import Image, ImageDraw
+
+        width, height = 420, 180
+        left, right = 20, 400
+        image = Image.new("RGB", (width, height), "white")
+        draw = ImageDraw.Draw(image)
+        low, high = min(levels), max(levels)
+        if low == high:
+            low -= 1
+            high += 1
+        def y_for(level):
+            return round(145 - (level - low) * 100 / (high - low))
+        segment = (right - left) / len(levels)
+        for index, level in enumerate(levels):
+            x0 = round(left + index * segment)
+            x1 = round(left + (index + 1) * segment)
+            draw.line((x0, y_for(level), x1, y_for(level)), fill=(23, 105, 170), width=5)
+        image.save(path)
+
+    @unittest.skipUnless(PILLOW_AVAILABLE, "Pillow is not installed")
+    def test_decodes_nrz_l_and_manchester_from_image_pixels(self):
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "signal.png"
+            self.make_waveform_image([1, -1, -1, 1], path)
+            self.assertEqual(decode_waveform_image(path, "NRZ-L", 4), "0110")
+            self.make_waveform_image([1, -1, -1, 1], path)
+            self.assertEqual(
+                decode_waveform_image(path, "Manchester", 2, samples_per_bit=2), "01"
+            )
+
+    @unittest.skipUnless(PILLOW_AVAILABLE, "Pillow is not installed")
+    def test_decodes_transition_based_schemes_with_initial_reference(self):
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "signal.png"
+            self.make_waveform_image([-1, -1, 1, 1], path)
+            self.assertEqual(decode_waveform_image(path, "NRZ-I", 4), "1010")
+            self.make_waveform_image([-1, 1, 1, -1], path)
+            self.assertEqual(
+                decode_waveform_image(path, "Differential Manchester", 2), "01"
+            )
+
+    @unittest.skipUnless(PILLOW_AVAILABLE, "Pillow is not installed")
+    def test_descrambles_ami_image_samples(self):
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "signal.png"
+            levels = encode_b8zs("100000000")
+            self.make_waveform_image(levels, path)
+            self.assertEqual(
+                decode_waveform_image(path, "AMI", len(levels), scrambling="b8zs"),
+                "100000000",
+            )
+            levels = encode_hdb3("110000")
+            self.make_waveform_image(levels, path)
+            self.assertEqual(
+                decode_waveform_image(path, "AMI", len(levels), scrambling="hdb3"),
+                "110000",
+            )
+
+    def test_decoder_requires_image_and_valid_signal_metadata(self):
+        with self.assertRaises(ValueError):
+            decode_waveform_image("missing.png", "NRZ-L", 0)
+        with self.assertRaises(ValueError):
+            decode_waveform_image("missing.png", "NRZ-L", 2, samples_per_bit=2)
 
 
 if __name__ == "__main__":
