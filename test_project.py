@@ -12,6 +12,14 @@ from data_generator import (
     validate_binary_data,
 )
 from palindrome import PalindromeResult, longest_palindrome
+from line_coding import (
+    encode_ami,
+    encode_differential_manchester,
+    encode_line_code,
+    encode_manchester,
+    encode_nrz_i,
+    encode_nrz_l,
+)
 
 
 class DataGeneratorTests(unittest.TestCase):
@@ -79,6 +87,37 @@ class PalindromeTests(unittest.TestCase):
     def test_rejects_non_string_input(self):
         with self.assertRaises(TypeError):
             longest_palindrome([0, 1, 0])
+
+
+class LineCodingTests(unittest.TestCase):
+    def test_nrz_l_convention(self):
+        self.assertEqual(encode_nrz_l("0101"), [1, -1, 1, -1])
+
+    def test_nrz_i_transitions_for_ones_only(self):
+        self.assertEqual(encode_nrz_i("1010"), [-1, -1, 1, 1])
+        self.assertEqual(encode_nrz_i("10", initial_level=-1), [1, 1])
+
+    def test_manchester_convention(self):
+        self.assertEqual(encode_manchester("01"), [1, -1, -1, 1])
+
+    def test_differential_manchester_has_middle_transition_and_zero_start_transition(self):
+        self.assertEqual(encode_differential_manchester("01"), [-1, 1, 1, -1])
+
+    def test_ami_alternates_one_pulse_polarity(self):
+        self.assertEqual(encode_ami("110101"), [1, -1, 0, 1, 0, -1])
+        self.assertEqual(encode_ami("11", initial_pulse=-1), [-1, 1])
+
+    def test_scheme_dispatch_is_case_and_separator_flexible(self):
+        self.assertEqual(encode_line_code("01", "Differential Manchester"), [-1, 1, 1, -1])
+        self.assertEqual(encode_line_code("01", "NRZ_L"), [1, -1])
+
+    def test_invalid_scheme_data_and_initial_level_are_rejected(self):
+        with self.assertRaises(ValueError):
+            encode_line_code("01", "unknown")
+        with self.assertRaises(ValueError):
+            encode_nrz_l("02")
+        with self.assertRaises(ValueError):
+            encode_nrz_i("1", initial_level=0)
 
 
 if __name__ == "__main__":
