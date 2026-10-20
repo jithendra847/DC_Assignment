@@ -11,6 +11,7 @@ from data_generator import (
     longest_zero_run,
     validate_binary_data,
 )
+from palindrome import PalindromeResult, longest_palindrome
 
 
 class DataGeneratorTests(unittest.TestCase):
@@ -54,6 +55,30 @@ class DataGeneratorTests(unittest.TestCase):
             generate_random_bits(-1)
         with self.assertRaises(ValueError):
             generate_data_with_zero_run(3, 4)
+
+
+class PalindromeTests(unittest.TestCase):
+    def test_returns_substring_length_and_start_index(self):
+        result = longest_palindrome("0010110")
+        self.assertEqual(result, PalindromeResult("0110", 4, 3))
+
+    def test_finds_even_length_palindrome(self):
+        self.assertEqual(longest_palindrome("0110"), PalindromeResult("0110", 4, 0))
+
+    def test_returns_earliest_when_longest_palindromes_tie(self):
+        self.assertEqual(longest_palindrome("abacdc"), PalindromeResult("aba", 3, 0))
+
+    def test_handles_empty_single_character_and_no_repeated_characters(self):
+        self.assertEqual(longest_palindrome(""), PalindromeResult("", 0, 0))
+        self.assertEqual(longest_palindrome("x"), PalindromeResult("x", 1, 0))
+        self.assertEqual(longest_palindrome("abcd"), PalindromeResult("a", 1, 0))
+
+    def test_input_may_contain_separator_like_characters(self):
+        self.assertEqual(longest_palindrome("a#a"), PalindromeResult("a#a", 3, 0))
+
+    def test_rejects_non_string_input(self):
+        with self.assertRaises(TypeError):
+            longest_palindrome([0, 1, 0])
 
 
 if __name__ == "__main__":
