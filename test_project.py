@@ -1,10 +1,11 @@
-"""Focused tests for the digital data generation milestone."""
+"""Automated unit and workflow tests for the assignment project."""
 
+import importlib.util
 import random
 import unittest
-import importlib.util
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from data_generator import (
     generate_data_with_eight_zeros,
@@ -14,7 +15,6 @@ from data_generator import (
     longest_zero_run,
     validate_binary_data,
 )
-from palindrome import PalindromeResult, longest_palindrome
 from line_coding import (
     encode_ami,
     encode_differential_manchester,
@@ -23,12 +23,12 @@ from line_coding import (
     encode_nrz_i,
     encode_nrz_l,
 )
-from scrambling import decode_b8zs, decode_hdb3, encode_b8zs, encode_hdb3
 from modulation import delta_decode, delta_encode, pcm_decode, pcm_encode
-from plotter import plot_delta_reconstruction, plot_modulation_reconstructions, plot_waveform
 from decoder import decode_waveform_image
 import main as assignment_main
-from unittest.mock import patch
+from palindrome import PalindromeResult, longest_palindrome
+from plotter import plot_delta_reconstruction, plot_modulation_reconstructions, plot_waveform
+from scrambling import decode_b8zs, decode_hdb3, encode_b8zs, encode_hdb3
 
 MATPLOTLIB_AVAILABLE = importlib.util.find_spec("matplotlib") is not None
 PILLOW_AVAILABLE = importlib.util.find_spec("PIL") is not None
@@ -75,6 +75,8 @@ class DataGeneratorTests(unittest.TestCase):
             generate_random_bits(-1)
         with self.assertRaises(ValueError):
             generate_data_with_zero_run(3, 4)
+        with self.assertRaises(TypeError):
+            generate_random_bits(True)
 
 
 class PalindromeTests(unittest.TestCase):
@@ -99,6 +101,19 @@ class PalindromeTests(unittest.TestCase):
     def test_rejects_non_string_input(self):
         with self.assertRaises(TypeError):
             longest_palindrome([0, 1, 0])
+
+    def test_matches_brute_force_for_short_binary_strings(self):
+        for length in range(8):
+            for value in range(1 << length):
+                text = format(value, f"0{length}b") if length else ""
+                candidates = [
+                    (text[start:end], start)
+                    for start in range(len(text) + 1)
+                    for end in range(start + 1, len(text) + 1)
+                    if text[start:end] == text[start:end][::-1]
+                ]
+                expected, start = max(candidates, key=lambda item: (len(item[0]), -item[1])) if candidates else ("", 0)
+                self.assertEqual(longest_palindrome(text), PalindromeResult(expected, len(expected), start))
 
 
 class LineCodingTests(unittest.TestCase):
@@ -131,6 +146,13 @@ class LineCodingTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             encode_nrz_i("1", initial_level=0)
 
+    def test_each_scheme_returns_the_expected_number_of_samples(self):
+        bits = "10101"
+        for scheme in ("NRZ-L", "NRZ-I", "AMI"):
+            self.assertEqual(len(encode_line_code(bits, scheme)), len(bits))
+        for scheme in ("Manchester", "Differential Manchester"):
+            self.assertEqual(len(encode_line_code(bits, scheme)), 2 * len(bits))
+
 
 class ScramblingTests(unittest.TestCase):
     def test_b8zs_uses_standard_pattern_for_both_preceding_polarities(self):
@@ -147,6 +169,11 @@ class ScramblingTests(unittest.TestCase):
         data = "101000000000110000000010000"
         self.assertEqual(decode_b8zs(encode_b8zs(data)), data)
         self.assertEqual(decode_hdb3(encode_hdb3(data)), data)
+
+    def test_scramblers_preserve_length_across_adjacent_substitutions(self):
+        for data in ("0000000000000000", "110000110000", "1000000001"):
+            self.assertEqual(decode_b8zs(encode_b8zs(data)), data)
+            self.assertEqual(decode_hdb3(encode_hdb3(data)), data)
 
     def test_initial_polarity_is_respected(self):
         self.assertEqual(encode_b8zs("00000000", initial_pulse=1)[3], -1)
@@ -192,6 +219,26 @@ class ModulationTests(unittest.TestCase):
             delta_encode([0.0], step_size=0)
         with self.assertRaises(ValueError):
             delta_decode("102", step_size=0.5)
+
+    def test_pcm_clips_using_custom_range_and_round_trips_bin_midpoints(self):
+        encoded = pcm_encode([-2.0, -0.5, 0.0, 2.0], 3, minimum=-1.0, maximum=1.0)
+        decoded = pcm_decode(encoded, 3, minimum=-1.0, maximum=1.0)
+        self.assertEqual(len(decoded), 4)
+        self.assertTrue(all(-1.0 < value < 1.0 for value in decoded))
+
+    def test_delta_stream_contains_one_bit_per_sample(self):
+        samples = [-1.0, -0.5, 0.25, 1.0, 0.25]
+        bits = delta_encode(samples, step_size=0.25)
+        self.assertEqual(len(bits), len(samples))
+        self.assertEqual(len(delta_decode(bits, step_size=0.25)), len(samples))
+
+    def test_non_finite_samples_and_invalid_quantizer_range_are_rejected(self):
+        with self.assertRaises(ValueError):
+            pcm_encode([float("nan")])
+        with self.assertRaises(ValueError):
+            pcm_decode("0", minimum=1, maximum=1)
+        with self.assertRaises(ValueError):
+            delta_encode([0.0], step_size=float("inf"))
 
 
 class PlotterTests(unittest.TestCase):
@@ -319,6 +366,25 @@ class InteractiveWorkflowTests(unittest.TestCase):
         self.assertEqual(plot_wave.call_count, 1)
         self.assertEqual(plot_wave.call_args.args[0], [-1, -1, 1])
         self.assertIn("Delta Modulation digital stream: 110", output)
+
+    def test_analog_pcm_stream_can_be_passed_to_line_coding(self):
+        answers = ["2", "1", "-1, 0.5", "2", "-1", "1", "", "y", "1", "", "n"]
+        output = []
+        with (
+            patch.object(assignment_main, "plot_pcm_reconstruction"),
+            patch.object(assignment_main, "plot_waveform") as plot_wave,
+        ):
+            assignment_main.run_interactive(self.make_input(answers), output.append)
+        self.assertEqual(plot_wave.call_args.args[0], [1, 1, -1, -1])
+        self.assertIn("PCM digital stream: 0011", output)
+
+    def test_digital_ami_workflow_applies_b8zs_before_plotting(self):
+        answers = ["1", "4", "100000000", "n", "5", "", "y", "2", "", "n"]
+        output = []
+        with patch.object(assignment_main, "plot_waveform") as plot_wave:
+            assignment_main.run_interactive(self.make_input(answers), output.append)
+        self.assertEqual(plot_wave.call_args.args[0], encode_b8zs("100000000"))
+        self.assertIn("AMI with B8ZS", plot_wave.call_args.kwargs["scheme"])
 
     def test_invalid_mode_is_reported_without_traceback(self):
         output = []
