@@ -20,6 +20,7 @@ from line_coding import (
     encode_nrz_i,
     encode_nrz_l,
 )
+from scrambling import decode_b8zs, decode_hdb3, encode_b8zs, encode_hdb3
 
 
 class DataGeneratorTests(unittest.TestCase):
@@ -118,6 +119,35 @@ class LineCodingTests(unittest.TestCase):
             encode_nrz_l("02")
         with self.assertRaises(ValueError):
             encode_nrz_i("1", initial_level=0)
+
+
+class ScramblingTests(unittest.TestCase):
+    def test_b8zs_uses_standard_pattern_for_both_preceding_polarities(self):
+        self.assertEqual(encode_b8zs("100000000"), [1, 0, 0, 0, 1, -1, 0, -1, 1])
+        self.assertEqual(encode_b8zs("00000000"), [0, 0, 0, -1, 1, 0, 1, -1])
+
+    def test_hdb3_uses_000v_for_odd_mark_parity(self):
+        self.assertEqual(encode_hdb3("10000"), [1, 0, 0, 0, 1])
+
+    def test_hdb3_uses_b00v_for_even_mark_parity(self):
+        self.assertEqual(encode_hdb3("110000"), [1, -1, 1, 0, 0, 1])
+
+    def test_scramblers_round_trip_data_with_multiple_substitutions(self):
+        data = "101000000000110000000010000"
+        self.assertEqual(decode_b8zs(encode_b8zs(data)), data)
+        self.assertEqual(decode_hdb3(encode_hdb3(data)), data)
+
+    def test_initial_polarity_is_respected(self):
+        self.assertEqual(encode_b8zs("00000000", initial_pulse=1)[3], -1)
+        self.assertEqual(encode_hdb3("1", initial_pulse=-1), [-1])
+
+    def test_invalid_data_levels_and_polarity_are_rejected(self):
+        with self.assertRaises(ValueError):
+            encode_hdb3("012")
+        with self.assertRaises(ValueError):
+            decode_b8zs([0, 0, 2])
+        with self.assertRaises(ValueError):
+            encode_b8zs("1", initial_pulse=0)
 
 
 if __name__ == "__main__":
