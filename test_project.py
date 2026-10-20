@@ -21,6 +21,7 @@ from line_coding import (
     encode_nrz_l,
 )
 from scrambling import decode_b8zs, decode_hdb3, encode_b8zs, encode_hdb3
+from modulation import delta_decode, delta_encode, pcm_decode, pcm_encode
 
 
 class DataGeneratorTests(unittest.TestCase):
@@ -148,6 +149,39 @@ class ScramblingTests(unittest.TestCase):
             decode_b8zs([0, 0, 2])
         with self.assertRaises(ValueError):
             encode_b8zs("1", initial_pulse=0)
+
+
+class ModulationTests(unittest.TestCase):
+    def test_pcm_encodes_fixed_width_uniform_quantizer_codes(self):
+        bits = pcm_encode([-1.0, -0.25, 0.0, 1.0], bits_per_sample=2)
+        self.assertEqual(bits, "00011011")
+
+    def test_pcm_decode_returns_quantizer_bin_midpoints(self):
+        self.assertEqual(pcm_decode("00011011", bits_per_sample=2), [-0.75, -0.25, 0.25, 0.75])
+
+    def test_pcm_clips_out_of_range_values_and_handles_empty_input(self):
+        self.assertEqual(pcm_encode([-5.0, 5.0], bits_per_sample=2), "0011")
+        self.assertEqual(pcm_encode([]), "")
+        self.assertEqual(pcm_decode(""), [])
+
+    def test_delta_modulation_encoding_and_staircase(self):
+        bits = delta_encode([0.2, 0.8, -0.2, -0.8], step_size=0.5)
+        self.assertEqual(bits, "1100")
+        self.assertEqual(delta_decode(bits, step_size=0.5), [0.5, 1.0, 0.5, 0.0])
+
+    def test_delta_initial_reference_and_empty_stream(self):
+        self.assertEqual(delta_decode("10", step_size=0.25, initial_value=1.0), [1.25, 1.0])
+        self.assertEqual(delta_encode([], step_size=1.0), "")
+
+    def test_invalid_pcm_and_delta_inputs_are_rejected(self):
+        with self.assertRaises(ValueError):
+            pcm_encode([0.0], bits_per_sample=0)
+        with self.assertRaises(ValueError):
+            pcm_decode("101", bits_per_sample=2)
+        with self.assertRaises(ValueError):
+            delta_encode([0.0], step_size=0)
+        with self.assertRaises(ValueError):
+            delta_decode("102", step_size=0.5)
 
 
 if __name__ == "__main__":
