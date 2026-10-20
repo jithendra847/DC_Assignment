@@ -295,15 +295,20 @@ The tests should cover the implemented functions, including:
 
 ---
 
-## 📖 References
+## Technical References and Acknowledgements
 
-- **Assignment reference repository:** [Data_Com_Assignment](https://github.com/star100rabh/Data_Com_Assignment/tree/main)
-- [Python documentation](https://docs.python.org/3/)
-- [NumPy documentation](https://numpy.org/doc/)
-- [Matplotlib documentation](https://matplotlib.org/stable/)
-- [Pillow documentation](https://pillow.readthedocs.io/)
+### Learning Resources and Documentation
 
-External references and AI assistance should be acknowledged accurately in the submitted specification report, according to the course requirements.
+- [DeepLearning.AI — AI Python for Beginners](https://www.deeplearning.ai/courses/ai-python-for-beginners) — Used to learn Python fundamentals, functions, working with modules, and using external libraries.
+- [NumPy Official Documentation](https://numpy.org/doc/stable/) — Consulted for numerical operations and array-related concepts.
+- [Matplotlib Official Documentation](https://matplotlib.org/stable/) — Consulted for plotting digital waveforms and reconstructed staircase signals.
+
+
+### AI Assistance Acknowledgement
+
+**Claude (Anthropic)** and **ChatGPT (OpenAI)** were used as supporting tools during development. They helped break down the project requirements, understand the implementation approach and relevant technical concepts, explore the appropriate technology stack, and investigate errors encountered while debugging the code. Their explanations were also used to clarify selected algorithms and signal-processing concepts. Suggestions were reviewed and applied as appropriate during implementation and testing.
+
+These resources supported the learning and development process. The project was tested against its intended functionality, and the implementation and its limitations should be understood and verified before use or further development.
 
 ---
 
